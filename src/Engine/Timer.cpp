@@ -65,7 +65,7 @@ Timer::~Timer()
  */
 void Timer::start()
 {
-	_frameSkipStart = _start = slowTick();
+	_start = SDL_GetTicks();
 	_running = true;
 }
 
@@ -80,14 +80,12 @@ void Timer::stop()
 
 /**
  * Returns the time passed since the last interval.
- * @return Time in milliseconds.
+ * @return Time in miliseconds.
  */
 Uint32 Timer::getTime() const
 {
 	if (_running)
-	{
-		return slowTick() - _start;
-	}
+		return SDL_GetTicks() - _start;
 	return 0;
 }
 
@@ -108,31 +106,16 @@ bool Timer::isRunning() const
  */
 void Timer::think(State* state, Surface* surface)
 {
-	Sint64 now = slowTick(); // must be signed to permit negative numbers
-	Game *game = state ? state->_game : 0; // this is used to make sure we stop calling *_state on *state in the loop once *state has been popped and deallocated
-	//assert(!game || game->isState(state));
-
 	if (_running)
 	{
-		if ((now - _frameSkipStart) >= _interval)
+		Uint32 ticks = SDL_GetTicks();
+		while (_running && ticks >= _start + _interval)
 		{
-			for (int i = 0; i <= maxFrameSkip && isRunning() && (now - _frameSkipStart) >= _interval; ++i)
-			{
-				if (state != 0 && _state != 0)
-				{
-					(state->*_state)();
-				}
-				_frameSkipStart += _interval;
-				// breaking here after one iteration effectively returns this function to its old functionality:
-				if (!game || !_frameSkipping || !game->isState(state)) break; // if game isn't set, we can't verify *state
-			}
-
-			if (_running && surface != 0 && _surface != 0)
-			{
+			_start += _interval;
+			if (state != 0 && _state != 0)
+				(state->*_state)();
+			if (surface != 0 && _surface != 0)
 				(surface->*_surface)();
-			}
-			_start = slowTick();
-			if (_start > _frameSkipStart) _frameSkipStart = _start; // don't play animations in ffwd to catch up :P
 		}
 	}
 }
@@ -144,6 +127,8 @@ void Timer::think(State* state, Surface* surface)
 void Timer::setInterval(Uint32 interval)
 {
 	_interval = interval;
+	if (_interval <= 0)
+		_interval = 1;
 }
 
 /**
